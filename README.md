@@ -27,3 +27,5 @@ Modifications appliquées uniquement sur les données dont l'espèce est ACROLA 
 - imputation simple en comparant le numéro de bague et les années de capture
 - les cas contradictoires sont remplacés par NA
 - catégorisation en classes d'âges (jeune versus adulte)
+
+### à suivre...
