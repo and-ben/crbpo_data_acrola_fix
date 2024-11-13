@@ -67,9 +67,11 @@ crbpo = crbpo %>%
 # fix_* : trace des changements TRUE/FALSE
 crbpo = crbpo %>%
   mutate(LAT = case_when(yr < 2024 & cId_Localisation == 91518 ~ 50.53372,
-                         yr < 2024 & cId_Localisation == 285793 ~ 46.24636),
+                         yr < 2024 & cId_Localisation == 285793 ~ 46.24636,
+                         .default = LAT),
          LON = case_when(yr < 2024 & cId_Localisation == 91518 ~ 2.686479,
-                         yr < 2024 & cId_Localisation == 285793 ~ 4.786796),
+                         yr < 2024 & cId_Localisation == 285793 ~ 4.786796,
+                         .default = LON),
          fix_LAT = case_when(yr < 2024 & cId_Localisation == 91518 ~ TRUE,
                             yr < 2024 & cId_Localisation == 285793 ~ TRUE,
                             .default = FALSE),
@@ -388,7 +390,7 @@ crbpo = crbpo %>%
 
 
 # Exports ####
-write_csv(crbpo, "/media/ben/SSD_BEN/ACROLA/dataset/baguage/data/processed/crbpo_formated.csv")
+write_csv(crbpo, "/media/ben/SSD_BEN/ACROLA/dataset/baguage/data/processed/crbpo_formatted.csv")
 
 crbpo_modif = crbpo %>%
   filter(fix_AGE == T |
