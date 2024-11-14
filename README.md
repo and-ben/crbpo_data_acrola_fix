@@ -7,9 +7,9 @@ PNA ACROLA 2022-2031
 Mise en forme des extractions issues de la base de données de baguage et déplacements d’oiseaux de France (effectuées avant 2024) avant exploitation du jeu de données.
 
 ## Résumé des modifications
-Des modifications du jeu de données sont appliquées spécifiquement pour les entrées en thème ACROLA et / ou l'espèce ACROLA.  
+Des modifications du jeu de données sont appliquées spécifiquement pour les entrées en thème ACROLA et / ou l'espèce ACROLA en migration post-nuptiale.  
 Ces modifications sont proposées suite aux contrôles effectués sur le jeu de données extrait fin 2023.  
-Pour des extractions de données postérieures à 2023, il faudra procéder à nouveau aux contrôles qualité.
+Pour des extractions de données postérieures à 2023 et/ou les données en migration pré-nuptiale, il faudra procéder à nouveau aux contrôles qualité.
 
 ### Thème
 Modification appliquées sur l'ensemble du jeu de données : 
