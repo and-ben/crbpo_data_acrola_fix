@@ -2,14 +2,17 @@
 # il faut lancer dans l'ordre
 # car pour corriger DS, il faut corriger HS et / ou HEURE
 # pour corriger HS, il faut corriger HEURE
-
+# !!!! ajouter pour tous les changements manuels un warning si nouveaux cas
 
 # Paramétrage de l'environnement de travail ####
 rm(list = ls()) # nettoie l'environnement de travail
 
 # liste les paquets utiles
 packages = c("tidyverse",
-             "nplyr")
+             "nplyr",
+             "terra",
+             "geodata",
+             "mapview")
 
 # fonction pour installer et/ou charger les paquets utiles
 package.check = lapply(
@@ -22,6 +25,14 @@ package.check = lapply(
   }
 )
 
+# fond de carte
+# charger un fond de carte existant ou
+# télécharger et charger un fond de carte (nécessite une connexion à internet)
+if(file.exists("./dataset/gadm/gadm41_FRA_0_pk.rds")){
+  france = unwrap(read_rds("./dataset/gadm/gadm41_FRA_0_pk.rds"))
+} else {
+  france = gadm(country = "fra", level = 0, path = "./dataset/")
+}
 
 # charge les données
 ## ici données de deux extractions jointes
@@ -38,8 +49,9 @@ crbpo_raw = crbpo # backup
 # sélection des données
 crbpo = crbpo %>%
   mutate(yr = year(DATE),
-         mois = month(DATE)) %>%
-  filter(mois >= 6 & mois <= 10 & yr > 2007)
+         mois = month(DATE),
+         dummy_loc = paste(LOCALITE, LIEUDIT, LON, LAT)) %>%
+  filter(mois >= 7 & mois <= 10 & yr > 2007)
 
 
 # Thème de session ####
@@ -57,10 +69,39 @@ crbpo = crbpo %>%
 # testé imputation simple, i.e., information disponible pour la même session
 # avec base clé session = c(DATE, BAGUEUR, LAT, LON) :
 # informations complètes, pas d'imputation en sortie
-
+#!!!! ajouter la routine d'imputation
 
 # Localisation ####
 ## Erreurs de coordonnées ####
+# sélectionne les entrées renseignées en France
+# conserve uniquement les données d'intérêt
+# supprime les doublons
+# transforme en données spatiales
+crbpo_carto = crbpo %>%
+  filter(PAYS == "FR") %>%
+  select(dummy_loc, LON, LAT) %>%
+  distinct() %>%
+  st_as_sf(., coords = c("LON", "LAT"), crs = 4326)
+
+# cherche les points qui ne tombent pas sur le polygone FR
+check_stations_FR = st_difference(crbpo_carto, st_as_sf(france))
+
+# renvoie un message si des points tombent en dehors du polygone FR
+if(nrow(check_stations_FR) > 0){
+  message("Certaines coordonnées géographiques pourraient avoir été incorrectement renseignées. 
+          \n Vérifiez manuellement les entrées potentiellement problématiques :\n")
+  print(check_stations_FR)
+  message("Ce message apparait quand les points des stations ne sont pas inclus
+dans le polygone délimitant le territoire français.\n
+          Néanmoins, il est possible que les points soient correctement localisés, mais que
+          ce message apparaisse. En effet, la résolution de la couche cartographique
+          du territoire national utilisée ici est assez grossière et/ou que les
+          points soient localisés dans une zone intertidale.")
+}
+
+# visualise les données de manière interactive
+mapview(check_stations_FR)
+
 # remplace les coordonnées erronnées :
 ## relocalise BEUVRY (centroïde)
 ## relocalise CRECHES-SUR-SAONE (centroïde)
@@ -91,12 +132,32 @@ crbpo = crbpo %>%
                                   LOCALITE == "VAUVILLE\r\nBEAUMONT-HAGUE" ~ TRUE,
                                   LOCALITE == "CARENTAN\r\nBREVANDS" ~ TRUE,
                                   LOCALITE == "SAINTENY\r\nSAINT-GEORGES-DE-BOHON" ~ TRUE,
+                                  LOCALITE == "CARENTAN\r\nVEYS (LES)" ~ TRUE,
+                                  LOCALITE == "CANET-EN-ROUSSILLON\r\nSAINT-NAZAIRE" ~ TRUE,
                                   .default = FALSE),
          LOCALITE = case_when(LOCALITE == "CARENTAN\r\nSAINT-COME-DU-MONT" ~ "CARENTAN-LES-MARAIS",
                               LOCALITE == "VAUVILLE\r\nBEAUMONT-HAGUE" ~ "HAGUE",
                               LOCALITE == "CARENTAN\r\nBREVANDS" ~ "CARENTAN-LES-MARAIS",
                               LOCALITE == "SAINTENY\r\nSAINT-GEORGES-DE-BOHON" ~ "TERRE-ET-MARAIS",
+                              LOCALITE == "CARENTAN\r\nVEYS (LES)" ~ "CARENTAN-LES-MARAIS",
+                              LOCALITE == "CANET-EN-ROUSSILLON\r\nSAINT-NAZAIRE" ~ "CANET-EN-ROUSSILLON",
                               .default = LOCALITE))
+
+# sélectionne les données où un saut de ligne est présent dans le champs LOCALITE
+# conserve uniquement la colonne LOCALITE
+# supprime les doublons
+check_LOCALITE = crbpo %>%
+  slice(str_which(crbpo$LOCALITE, "\n")) %>%
+  select(LOCALITE) %>%
+  distinct()
+
+# renvoie un message si un saut de ligne est présent
+if(nrow(check_LOCALITE) > 0){
+    message("Un saut de ligne est présent dans certaines cellules.\n
+Vérifiez les cas problématiques suivants :\n")
+  print(check_LOCALITE)
+  } 
+
 
 ## LIEUDIT ####
 # harmonisation des noms
@@ -115,7 +176,7 @@ crbpo = crbpo %>%
                              LIEUDIT == "ETANG DU LEHAN" ~ "Marais du Léhan",
                              LIEUDIT == "RCFS MIGRON" ~ "Réserve du Migron",
                              LIEUDIT == "PK21" ~ "PK 21",
-                             LIEUDIT == "Terre d'oiseaux" ~ "Terres d'oiseaux", 
+                             LIEUDIT == "Terre d'oiseaux" ~ "Terres d'oiseaux",  # attention peut-être à ne pas corriger
                              LIEUDIT == "CEN_1" ~ "CD_2",
                              .default = LIEUDIT))
 
@@ -144,12 +205,12 @@ crbpo_wo_acrola = crbpo %>%
 ## fix_* :  trace des changements TRUE / FALSE
 crbpo_acrola = crbpo %>%
   filter(`THEME SESSION` == "ACROLA") %>%
-  mutate(session_key = paste(DATE, BAGUEUR, LAT, LON),
+  mutate(key_session = paste(DATE, BAGUEUR, LAT, LON), # colonne déjà existante
          FS_copied = NA,
          HS_copied = hms::as_hms(NA),
          DS_copied = hms::as_hms(NA),
          fix_NF = case_when(NF == 999 | NF == -999 ~ TRUE,
-                            NF == 33 ~ TRUE,
+                            NF == 33 ~ TRUE, # spécifique à la data, omettre pour le futur ? ou virer la ligne de code quand pb réglé ?
                             .default = FALSE),
          NF = case_when(NF == 999 | NF == -999 ~ NA,
                         NF == 33 ~ 3,
@@ -158,7 +219,7 @@ crbpo_acrola = crbpo %>%
                             .default = FALSE),
          FS = case_when(FS == 3 ~ 36,
                         .default = FS)) %>%
-  nest(data = -session_key) %>%
+  nest(data = -key_session) %>%
   nest_mutate(data,
               FS_copied = ifelse(length(na.omit(unique(FS))) == 1,
                                  unique(na.omit(FS)), NA),
@@ -266,7 +327,7 @@ crbpo_acrola = crbpo_acrola %>%
 # si DS non renseigné, estime DS sur la base de heure de capture max et heure de début de session
 # si DS et HS non renseignés, estime DS sur la base des heures de capture min et max
 crbpo_acrola = crbpo_acrola %>%
-  nest(data = -session_key) %>%
+  nest(data = -key_session) %>%
   rowwise() %>%
   mutate(h_max = hms::as_hms(max(data$HEURE, na.rm = T)),
          h_min = hms::as_hms(min(data$HEURE, na.rm = T)),
@@ -299,9 +360,9 @@ crbpo = bind_rows(crbpo_wo_acrola, crbpo_acrola)
 
 # remplace l'AGE en cas de problème détecté
 # NOTE :
-## si le code commence par DATE, imputation avec info la plus pertinente
-## si le code commence par yr, plusieurs âges différents pour la même année donc remplace par NA toutes les occurences
-## si le code commence par ESPECE, règle générale de conversion vers jeune / adulte / NA
+## si le code R commence par DATE, imputation avec info la plus pertinente
+## si le code R commence par yr, plusieurs âges différents pour la même année donc remplace par NA toutes les occurences
+## si le code R commence par ESPECE, règle générale de conversion vers jeune / adulte / NA
 crbpo = crbpo %>%
   mutate(fix_AGE = case_when(DATE == "2009-06-20" & BAGUE == "....6068531" ~ TRUE,
                              DATE == "2010-07-06" & BAGUE == "....6051019" ~ TRUE,
@@ -390,6 +451,7 @@ crbpo = crbpo %>%
 
 
 # Exports ####
+# jeu de données a exploiter
 write_csv(crbpo, "/media/ben/SSD_BEN/ACROLA/dataset/baguage/data/processed/crbpo_formatted.csv")
 
 crbpo_modif = crbpo %>%
@@ -404,6 +466,8 @@ crbpo_modif = crbpo %>%
            fix_LON == T |
            fix_NF == T |
            fix_theme_session == T)
+
+write_csv(crbpo_modif, "/media/ben/SSD_BEN/ACROLA/dataset/baguage/data/processed/crbpo_modif.csv")
 
 
 # END
@@ -426,7 +490,7 @@ check = crbpo %>%
   mutate(nb_sp = length(unique(data$ESPECE))) %>%
   filter(nb_sp > 1) %>%
   unnest(data)
-# pb ....9108217
+# pb ....9108217 à omettre
 
 
 # croiser MA avec adip si pour corrections MA
@@ -463,7 +527,7 @@ heure_count = crbpo_acrola %>%
 check = crbpo_acrola %>%
   filter(ESPECE == "ACROLA") %>%
   filter(DS > hms::as_hms("08:30:00")) %>%
-  group_by(session_key) %>%
+  group_by(key_session) %>%
   nest()
 
 hs_count = crbpo_acrola %>%
@@ -474,13 +538,13 @@ hs_count = crbpo_acrola %>%
 check = crbpo_acrola %>%
   filter(ESPECE == "ACROLA") %>%
   filter(HS < hms::as_hms("04:00:00")) %>%
-  group_by(session_key) %>%
+  group_by(key_session) %>%
   nest()
 
 check = crbpo_acrola %>%
   filter(ESPECE == "ACROLA") %>%
   filter(HS > hms::as_hms("10:00:00")) %>%
-  group_by(session_key) %>%
+  group_by(key_session) %>%
   nest()
 
 
